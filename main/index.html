@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
@@ -232,6 +232,9 @@
         .legend-dot.orange { background: var(--accent-orange); box-shadow: 0 0 8px rgba(255,159,67,0.4); }
         .legend-dot.yellow { background: var(--accent-yellow); box-shadow: 0 0 8px rgba(254,202,87,0.3); }
         .legend-dot.blue { background: var(--accent-blue); box-shadow: 0 0 8px rgba(52,152,219,0.4); }
+        .legend-dot.darkred { background: #c0392b; box-shadow: 0 0 8px rgba(192,57,43,0.4); }
+        .legend-dot.darkorange { background: #e67e22; box-shadow: 0 0 8px rgba(230,126,34,0.4); }
+        .legend-dot.green { background: #27ae60; box-shadow: 0 0 8px rgba(39,174,96,0.4); }
 
         .legend-text {
             font-size: 12px;
@@ -305,6 +308,9 @@
         .badge-2 { background: rgba(255,159,67,0.15); color: var(--accent-orange); }
         .badge-3 { background: rgba(254,202,87,0.15); color: var(--accent-yellow); }
         .badge-surplus { background: rgba(52,152,219,0.15); color: var(--accent-blue); }
+        .badge-true-excess { background: rgba(192,57,43,0.15); color: #e74c3c; }
+        .badge-realloc { background: rgba(230,126,34,0.15); color: #e67e22; }
+        .badge-proper { background: rgba(39,174,96,0.15); color: #27ae60; }
 
         .marker-detail-name {
             font-size: 13px;
@@ -562,9 +568,19 @@
                     <div class="stat-detail" id="stat-p3-detail">부족 나머지</div>
                 </div>
                 <div class="stat-card priority-surplus active" data-category="과잉" onclick="toggleCategory(this)">
-                    <div class="stat-label">🔵 과잉 설치</div>
-                    <div class="stat-value" id="stat-surplus-count">-</div>
-                    <div class="stat-detail" id="stat-surplus-detail">카메라 재배치 대상</div>
+                    <div class="stat-label">🔴 과잉</div>
+                    <div class="stat-value" id="stat-true-excess-count">-</div>
+                    <div class="stat-detail" id="stat-true-excess-detail">재배치 1순위 공급원</div>
+                </div>
+                <div class="stat-card priority-surplus active" data-category="재배치가능" onclick="toggleCategory(this)">
+                    <div class="stat-label">🟠 재배치 가능</div>
+                    <div class="stat-value" id="stat-realloc-count">-</div>
+                    <div class="stat-detail" id="stat-realloc-detail">재배치 2순위 공급원</div>
+                </div>
+                <div class="stat-card priority-3" data-category="적정" onclick="toggleCategory(this)">
+                    <div class="stat-label">🟢 적정</div>
+                    <div class="stat-value" id="stat-proper-count">-</div>
+                    <div class="stat-detail" id="stat-proper-detail">현행 유지 권고</div>
                 </div>
             </div>
 
@@ -592,8 +608,16 @@
                     <div class="legend-text"><strong>3순위</strong> — 부족 나머지 (카메라 0대)</div>
                 </div>
                 <div class="legend-item">
-                    <div class="legend-dot blue"></div>
-                    <div class="legend-text"><strong>과잉</strong> — 카메라 과밀 설치 지점</div>
+                    <div class="legend-dot darkred"></div>
+                    <div class="legend-text"><strong>과잉</strong> — 단속 효과 0%, 재배치 1순위</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot darkorange"></div>
+                    <div class="legend-text"><strong>재배치 가능</strong> — 효율 낮음, 재배치 2순위</div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot green"></div>
+                    <div class="legend-text"><strong>적정</strong> — 위험도·단속효과 양호, 현행 유지</div>
                 </div>
             </div>
 
@@ -639,15 +663,17 @@
         let markers = [];
         let clusterers = {};
         let currentInfoWindow = null;
-        let activeCategories = new Set(['1순위', '2순위', '과잉']);
+        let activeCategories = new Set(['1순위', '2순위', '과잉', '재배치가능']);
         let currentSido = '전체';
 
         // 카테고리별 색상 설정
         const CATEGORY_CONFIG = {
-            '1순위': { color: '#ff4757', markerColor: '#ff4757', emoji: '🔴', zIndex: 4 },
-            '2순위': { color: '#ff9f43', markerColor: '#ff9f43', emoji: '🟠', zIndex: 3 },
-            '3순위': { color: '#feca57', markerColor: '#feca57', emoji: '🟡', zIndex: 2 },
-            '과잉':  { color: '#3498db', markerColor: '#3498db', emoji: '🔵', zIndex: 1 },
+            '1순위':     { color: '#ff4757', markerColor: '#ff4757', emoji: '🔴', zIndex: 6 },
+            '2순위':     { color: '#ff9f43', markerColor: '#ff9f43', emoji: '🟠', zIndex: 5 },
+            '3순위':     { color: '#feca57', markerColor: '#feca57', emoji: '🟡', zIndex: 4 },
+            '과잉':  { color: '#c0392b', markerColor: '#c0392b', emoji: '⛔', zIndex: 3 },
+            '재배치가능': { color: '#e67e22', markerColor: '#e67e22', emoji: '🔶', zIndex: 2 },
+            '적정':      { color: '#27ae60', markerColor: '#27ae60', emoji: '🟢', zIndex: 1 },
         };
 
         // ── Initialize Map ───────────────────────────────
@@ -748,8 +774,20 @@
                 document.getElementById('stat-p3-detail').textContent = `평균 위험점수 ${data.stats['3순위'].avgRisk}`;
 
                 // 과잉
-                document.getElementById('stat-surplus-count').textContent = data.stats['과잉'].count.toLocaleString();
-                document.getElementById('stat-surplus-detail').textContent = `평균 카메라 ${data.stats['과잉'].avgCameras}대`;
+                if (data.stats['과잉']) {
+                    document.getElementById('stat-true-excess-count').textContent = data.stats['과잉'].count.toLocaleString();
+                    document.getElementById('stat-true-excess-detail').textContent = `효과비율 ${data.stats['과잉'].avgRisk}점`;
+                }
+                // 재배치가능
+                if (data.stats['재배치가능']) {
+                    document.getElementById('stat-realloc-count').textContent = data.stats['재배치가능'].count.toLocaleString();
+                    document.getElementById('stat-realloc-detail').textContent = `평균 카메라 ${data.stats['재배치가능'].avgCameras}대`;
+                }
+                // 적정
+                if (data.stats['적정']) {
+                    document.getElementById('stat-proper-count').textContent = data.stats['적정'].count.toLocaleString();
+                    document.getElementById('stat-proper-detail').textContent = `평균 카메라 ${data.stats['적정'].avgCameras}대`;
+                }
 
                 // 시도 필터 채우기
                 const select = document.getElementById('sidoFilter');
@@ -851,7 +889,10 @@
             const cfg = CATEGORY_CONFIG[data.category];
             const badgeClass = data.category === '1순위' ? 'badge-1' :
                                data.category === '2순위' ? 'badge-2' :
-                               data.category === '3순위' ? 'badge-3' : 'badge-surplus';
+                               data.category === '3순위' ? 'badge-3' :
+                               data.category === '과잉' ? 'badge-true-excess' :
+                               data.category === '재배치가능' ? 'badge-realloc' :
+                               data.category === '적정' ? 'badge-proper' : 'badge-surplus';
 
             const content = `
                 <div class="custom-infowindow">
@@ -887,7 +928,10 @@
             const cfg = CATEGORY_CONFIG[data.category];
             const badgeClass = data.category === '1순위' ? 'badge-1' :
                                data.category === '2순위' ? 'badge-2' :
-                               data.category === '3순위' ? 'badge-3' : 'badge-surplus';
+                               data.category === '3순위' ? 'badge-3' :
+                               data.category === '과잉' ? 'badge-true-excess' :
+                               data.category === '재배치가능' ? 'badge-realloc' :
+                               data.category === '적정' ? 'badge-proper' : 'badge-surplus';
 
             const html = `
                 <div class="marker-detail">
