@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 카메라 재배치 시각화 지도 - FastAPI 서버
 카카오 맵 API를 활용한 우선순위별 카메라 설치 지점 + 과잉 설치 지점 시각화
@@ -27,8 +27,8 @@ PARENT_DIR = os.path.dirname(BASE_DIR)
 OUTPUT_DIR = os.path.join(PARENT_DIR, "output_v2")
 
 def load_data():
-    """cluster_result_v2.csv를 로드하고 우선순위를 계산"""
-    csv_path = os.path.join(OUTPUT_DIR, "cluster_result_v2.csv")
+    """결과_전체군집화데이터.csv를 로드하고 우선순위를 계산"""
+    csv_path = os.path.join(OUTPUT_DIR, "결과_전체군집화데이터.csv")
     df = pd.read_csv(csv_path, encoding="utf-8-sig")
 
     # 위험점수 계산 (EPDO 기반)
@@ -53,11 +53,31 @@ def load_data():
     # 카테고리 분류
     results = []
 
-    # 1) 과잉 구역 (카메라 과잉 설치 지점)
-    surplus = df[df["군집라벨"].str.contains("과잉", na=False)].copy()
-    surplus["category"] = "과잉"
-    surplus["priority"] = "과잉 (카메라 재배치 대상)"
-    results.append(surplus)
+    # 1) 과잉 구역 → 과잉세분화 컬럼 기반 3분류
+    surplus = df[df["군집라벨"].str.contains("카메라 설치지점", na=False)].copy()
+    if "과잉세분화" in surplus.columns:
+        # 과잉 (재배치 1순위 공급원)
+        true_ex = surplus[surplus["과잉세분화"].str.contains("과잉", na=False)].copy()
+        true_ex["category"] = "과잉"
+        true_ex["priority"] = "과잉 (재배치 1순위 공급원)"
+        results.append(true_ex)
+
+        # 재배치 가능 (재배치 2순위 공급원)
+        realloc = surplus[surplus["과잉세분화"].str.contains("재배치가능", na=False)].copy()
+        realloc["category"] = "재배치가능"
+        realloc["priority"] = "재배치 가능 (재배치 2순위 공급원)"
+        results.append(realloc)
+
+        # 적정 (현행 유지)
+        proper = surplus[surplus["과잉세분화"].str.contains("적정", na=False)].copy()
+        proper["category"] = "적정"
+        proper["priority"] = "적정 (현행 유지 권고)"
+        results.append(proper)
+    else:
+        # 과잉세분화 컬럼이 없으면 기존 방식
+        surplus["category"] = "과잉"
+        surplus["priority"] = "과잉 (카메라 재배치 대상)"
+        results.append(surplus)
 
     # 2) 카메라 미설치(0대) 지점만 재배치 대상
     no_cam = df[df["반경내카메라수"] == 0].copy()
@@ -93,9 +113,11 @@ def load_data():
 print("데이터 로딩 중...")
 DF = load_data()
 print(f"총 {len(DF):,}건 로드 완료")
-for cat in ["과잉", "1순위", "2순위", "3순위"]:
+CATEGORIES = ["과잉", "재배치가능", "적정", "1순위", "2순위", "3순위"]
+for cat in CATEGORIES:
     count = len(DF[DF["category"] == cat])
-    print(f"  {cat}: {count:,}건")
+    if count > 0:
+        print(f"  {cat}: {count:,}건")
 
 
 # ── API 엔드포인트 ─────────────────────────────────────────────
@@ -178,15 +200,17 @@ async def get_markers(
 async def get_stats():
     """전체 통계 요약 반환"""
     stats = {}
-    for cat in ["과잉", "1순위", "2순위", "3순위"]:
+    for cat in CATEGORIES:
         subset = DF[DF["category"] == cat]
+        if len(subset) == 0:
+            continue
         stats[cat] = {
             "count": int(len(subset)),
-            "avgAccidents": round(float(subset["총사고건수"].mean()), 1) if len(subset) > 0 else 0,
-            "avgDeaths": round(float(subset["총사망자수"].mean()), 2) if len(subset) > 0 else 0,
-            "avgSerious": round(float(subset["총중상자수"].mean()), 1) if len(subset) > 0 else 0,
-            "avgCameras": round(float(subset["반경내카메라수"].mean()), 1) if len(subset) > 0 else 0,
-            "avgRisk": round(float(subset["위험점수"].mean()), 1) if len(subset) > 0 else 0,
+            "avgAccidents": round(float(subset["총사고건수"].mean()), 1),
+            "avgDeaths": round(float(subset["총사망자수"].mean()), 2),
+            "avgSerious": round(float(subset["총중상자수"].mean()), 1),
+            "avgCameras": round(float(subset["반경내카메라수"].mean()), 1),
+            "avgRisk": round(float(subset["위험점수"].mean()), 1),
         }
 
     # 시도 목록
