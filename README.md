@@ -3,7 +3,9 @@
 
 ### 시각화 지도 실행
 `pip install -r requirements.txt` 의존성 설치후 <br>
-루트 디렉터리에서 `main/main.py` 실행
+루트 디렉터리에서 `main/main.py` 실행<br>
+output 산출물들 데이터로 시각화 됩니다
+
 
 ### 컨벤션 및 그라운드 룰
 모든 코드는 main 에다가 바로 push 하지 않고, 카카오톡 으로 코드 수정사항을 논의하고 PR-Merge 함. <br>
